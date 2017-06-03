@@ -15,14 +15,14 @@ import Common._
 // arbitrates memory access
 class SodorMemArbiter(implicit val conf: SodorConfiguration) extends Module
 {
-   val io = IO(new Bundle
-      {
-         // TODO I need to come up with better names... this is too confusing 
-         // from the point of view of the other modules
-         val imem = Flipped(new MemPortIo(conf.xprlen)) // instruction fetch
-         val dmem = Flipped(new MemPortIo(conf.xprlen)) // load/store 
-         val mem  = new MemPortIo(conf.xprlen)      // the single-ported memory
-      })
+  val io = IO(new Bundle
+  {
+    // TODO I need to come up with better names... this is too confusing 
+    // from the point of view of the other modules
+    val imem = Flipped(new MemPortIo(conf.xprlen)) // instruction fetch
+    val dmem = Flipped(new MemPortIo(conf.xprlen)) // load/store 
+    val mem  = new MemPortIo(conf.xprlen)      // the single-ported memory
+  })
 
    //***************************
    val i1reg = Reg(UInt(conf.xprlen.W))

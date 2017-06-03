@@ -57,7 +57,7 @@ class DatPath(implicit conf: SodorConfiguration) extends Module
    val wb_reg_valid    = Reg(init=Bool(false))
    val wb_reg_ctrl     = Reg(new CtrlSignals)
    val wb_reg_alu      = Reg(UInt(conf.xprlen.W))
-   val wb_reg_csr_addr = Reg(UInt())
+   val wb_reg_csr_addr = Reg(UInt(12.W))
    val wb_reg_wbaddr   = Reg(UInt(log2Ceil(32).W))
    
    val wb_hazard_stall = Wire(Bool()) // hazard detected, stall in IF/EXE required
@@ -247,7 +247,7 @@ class DatPath(implicit conf: SodorConfiguration) extends Module
    debug_wb_pc := Mux(Reg(next=wb_hazard_stall), 0.U, Reg(next=exe_pc))
    val debug_wb_inst = Reg(next=Mux((wb_hazard_stall || io.ctl.exe_kill || !exe_valid), BUBBLE, exe_inst))
    printf("Cyc=%d Op1=[0x%x] Op2=[0x%x] W[%c,%d= 0x%x] [%c,%d] %d %c %c PC=(0x%x,0x%x,0x%x) [%d,%d,%d], WB: DASM(%x)\n"
-      , csr.io.time(5,0)
+      , csr.io.time(31,0)
       , exe_alu_op1
       , exe_alu_op2
       , Mux(wb_reg_ctrl.rf_wen, Str("W"), Str("_"))
@@ -260,8 +260,8 @@ class DatPath(implicit conf: SodorConfiguration) extends Module
       , Mux(io.ctl.pc_sel === 1.U, Str("B"),   // Br -> B
         Mux(io.ctl.pc_sel === 2.U, Str("J"),   // J -> J
         Mux(io.ctl.pc_sel === 3.U, Str("R"),   // JR -> R
-        Mux(io.ctl.pc_sel === 4.U, Str("Xl"),   //XPCT -> X
-        Mux(io.ctl.pc_sel === 0.U, Str("   "), Str(" ?? "))))))
+        Mux(io.ctl.pc_sel === 4.U, Str("X"),   //XPCT -> X
+        Mux(io.ctl.pc_sel === 0.U, Str(" "), Str("?"))))))
       , io.imem.debug.if_pc(19,0)
       , exe_pc(19,0)
       , Mux(Reg(next=wb_hazard_stall), 0.U, Reg(next=exe_pc(19,0)))

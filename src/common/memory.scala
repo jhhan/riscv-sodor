@@ -144,10 +144,6 @@ class AsyncScratchPadMemory(num_core_ports: Int, num_bytes: Int = (1 << 21))(imp
    io.core_ports(IPORT).resp.bits.data := async_data.io.dataInstr(IPORT).data
    ////////////
 
-
-  // printf("daddr:0x%x drdata:0x%x dwdata:0x%x mask:%d typ:%d\n",io.core_ports(0).req.bits.addr,io.core_ports(0).resp.bits.data,io.core_ports(0).req.bits.data
-    //  ,StoreMask(req_typi, req_addri(2,0)),io.core_ports(0).req.bits.fcn)
-
    // HTIF PORT-------
    io.htif_port.req.ready := Bool(true) // for now, no back pressure
    io.htif_port.resp.valid := Reg(next=io.htif_port.req.valid && io.htif_port.req.bits.fcn === M_XRD)
@@ -164,6 +160,74 @@ class AsyncScratchPadMemory(num_core_ports: Int, num_bytes: Int = (1 << 21))(imp
       async_data.io.hw.mask := "b11111111".U
    } 
 }
+
+class SyncMemOnePort(num_bytes: Int = (1 << 21))(implicit conf: SodorConfiguration) extends Module
+{
+   val io = IO(new Bundle
+   {
+      val core_port = Flipped(new MemPortIo(data_width = conf.xprlen))
+      val htif_port = Flipped(new MemPortIo(data_width = 64))
+   })
+
+
+   // HTIF min packet size is 8 bytes 
+   // but 32b core will access in 4 byte chunks
+   // thus we will bank the scratchpad
+   val num_bytes_per_line = 8
+   val num_lines = num_bytes / num_bytes_per_line
+   println("\n    Sodor Tile: creating Synchronous Scratchpad Memory of size " + num_lines*num_bytes_per_line/1024 + " kB\n")
+   val data_bank = SyncReadMem(num_lines, Vec(num_bytes_per_line, UInt(8.W)))
+
+   // constants
+   val idx_lsb = log2Ceil(num_bytes_per_line)    
+   val creq_valid      = io.core_port.req.valid
+   val creq_addr       = io.core_port.req.bits.addr
+   val creq_fcn        = io.core_port.req.bits.fcn
+   val creq_typ        = io.core_port.req.bits.typ
+
+
+   ////////////////// READ PORT
+   val r_data_idx = Wire(UInt(32.W))
+   //allow htif
+   io.htif_port.resp.valid := Reg(next=io.htif_port.req.valid && io.htif_port.req.bits.fcn === M_XRD)
+   io.core_port.resp.valid := Reg(next=(!io.htif_port.req.valid && io.core_port.req.bits.fcn === M_XRD))
+   when (io.htif_port.req.valid){
+      r_data_idx := io.htif_port.req.bits.addr >> idx_lsb.U
+   } .elsewhen (!io.htif_port.req.valid) {
+      r_data_idx := creq_addr >> idx_lsb.U
+   }
+   val rdata_out = Wire(UInt(32.W))
+   val read_data_out = Wire(Vec(num_bytes_per_line, UInt(8.W)))
+   read_data_out := data_bank.read(r_data_idx)  /// 1R PORT
+   rdata_out     := LoadDataGen(read_data_out, Reg(next=creq_typ), Reg(next = creq_addr(2,0)))
+   io.core_port.resp.bits.data := rdata_out
+   io.htif_port.resp.bits.data := read_data_out.asUInt
+   ///////////////////
+
+
+   /////////////////// WRITE PORT
+   val wdata_idx = Wire(UInt(32.W))
+   val wdata = Wire(Vec(num_bytes_per_line, UInt(8.W)))
+   val wmask = Wire(UInt(8.W))
+
+   when (io.htif_port.req.valid && io.htif_port.req.bits.fcn === M_XWR)
+   {
+      wmask := "b11111111".U
+      wdata := GenVec(io.htif_port.req.bits.data)
+      wdata_idx := io.htif_port.req.bits.addr >> idx_lsb.U
+   } .elsewhen (!io.htif_port.req.valid && io.core_port.req.bits.fcn === M_XWR) {
+      wdata_idx := creq_addr >> idx_lsb.U
+      wmask := StoreMask(creq_typ, creq_addr(2,0))    
+      wdata := StoreDataGen(io.core_port.req.bits.data, creq_typ, creq_addr(2,0))
+   }
+
+   when(creq_fcn === M_XWR || io.htif_port.req.bits.fcn === M_XWR){
+      data_bank.write(wdata_idx, wdata , wmask.toBools)   /// 1W PORT
+   }
+   ///////////////////
+}
+
+
 
 class ScratchPadMemory(num_core_ports: Int, num_bytes: Int = (1 << 21), seq_read: Boolean = false)(implicit conf: SodorConfiguration) extends Module
 {
@@ -196,8 +260,6 @@ class ScratchPadMemory(num_core_ports: Int, num_bytes: Int = (1 << 21), seq_read
       val req_data       = io.core_ports(i).req.bits.data
       val req_fcn        = io.core_ports(i).req.bits.fcn
       val req_typ        = io.core_ports(i).req.bits.typ
-      val byte_shift_amt = io.core_ports(i).req.bits.addr(2,0)
-      val bit_shift_amt  = Cat(byte_shift_amt, UInt(0,3))
 
       // read access
       val data_idx = Wire(UInt())

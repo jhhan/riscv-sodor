@@ -28,13 +28,14 @@ class Core(resetSignal: Bool = null)(implicit conf: SodorConfiguration) extends 
    frontend.io.imem <> io.imem
    frontend.io.cpu <> cpath.io.imem
    frontend.io.cpu <> dpath.io.imem
+   frontend.io.cpu.req.valid := cpath.io.imem.req.valid
 
    cpath.io.ctl  <> dpath.io.ctl
    cpath.io.dat  <> dpath.io.dat
    
    
-   cpath.io.dmem <> io.dmem
-   dpath.io.dmem <> io.dmem
+   io.dmem <> cpath.io.dmem
+   io.dmem <> dpath.io.dmem
    
    dpath.io.host <> io.host
 }

@@ -9,3 +9,6 @@ global_asm_tests += \
  
 
 include $(srcDir)/emulator/common/Makefile.include
+
+
+CHISEL_ARGS := -td emulator/${MK_TARGET_PROC}/generated-src -frsq -c:Top:-o:emulator/${MK_TARGET_PROC}/generated-src/temp.conf 
